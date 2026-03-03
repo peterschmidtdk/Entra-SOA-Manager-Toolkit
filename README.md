@@ -1,6 +1,6 @@
 This is a list of lightweight PowerShell tools for managing Entra ID ‘source of authority’ (SOA) scenarios, quickly audit, validate, and correct identity attributes during migrations and hybrid-to-cloud transitions.
 
-# Change-EntraUserSOA-Bulk.ps1
+# Set-EntraUserSOA-Bulk.ps1
 
 Bulk update Entra ID users’ **Source of Authority (SOA)** by setting **`onPremisesSyncBehavior.isCloudManaged`** using Microsoft Graph.
 
