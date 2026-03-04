@@ -49,3 +49,6 @@ This script aligns with Microsoft’s **Source of Authority (SOA)** guidance for
 - Convert Group Source of Authority (SOA) to the cloud (Overview)  
   https://learn.microsoft.com/en-us/entra/identity/hybrid/concept-source-of-authority-overview :contentReference[oaicite:4]{index=4}
 
+### Guidance for IT Architects
+- Cloud-first identity management: Guidance for IT architects (SOA)  
+  https://learn.microsoft.com/en-us/entra/identity/hybrid/guidance-it-architects-source-of-authority :contentReference[oaicite:5]{index=5}
