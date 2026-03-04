@@ -26,6 +26,16 @@ For each row in a CSV file, the script:
 
 ## Requirements
 
+## CSV file format
+Identity,Mode
+<user-or-group-objectId-or-displayName-or-mail-or-userprinciplanmae>,
+
+Identity: recommended = Group ObjectId (GUID) or UserPrincipalName.
+Also supports displayName (only if it resolves to exactly one group) or mail (group email address).
+
+Mode: optional. If blank/missing → defaults to True (convert to cloud-managed).
+Mode values supported are the same as your User script: true/false, enable/disable, cloud/onprem, etc.
+
 ### PowerShell Modules
 - `Microsoft.Graph.Authentication`
 - `Microsoft.Graph.Users`
