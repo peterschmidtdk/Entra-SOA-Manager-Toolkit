@@ -33,3 +33,14 @@ For each row in a CSV file, the script:
 Install:
 ```powershell
 Install-Module Microsoft.Graph -Scope CurrentUser
+
+## Microsoft documentation (Source of Authority)
+
+This script aligns with Microsoft’s **Source of Authority (SOA)** guidance for transitioning identity management from on-premises AD DS to **Microsoft Entra ID**, by updating **`onPremisesSyncBehavior.isCloudManaged`** through Microsoft Graph (beta). :contentReference[oaicite:1]{index=1}
+
+### User SOA (Users)
+- Transfer user Source of Authority (SOA) to the cloud (Overview)  
+  https://learn.microsoft.com/en-us/entra/identity/hybrid/user-source-of-authority-overview :contentReference[oaicite:2]{index=2}
+- Configure User Source of Authority (SOA) (How-to)  
+  https://learn.microsoft.com/en-us/entra/identity/hybrid/how-to-user-source-of-authority-configure :contentReference[oaicite:3]{index=3}
+
