@@ -30,7 +30,7 @@ For each row in a CSV file, the script:
 - `Microsoft.Graph.Authentication`
 - `Microsoft.Graph.Users`
 
-Install:
+Install and how to run:
 ```PowerShell:
 Install-Module Microsoft.Graph -Scope CurrentUser
 
