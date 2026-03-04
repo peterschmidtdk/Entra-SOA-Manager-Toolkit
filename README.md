@@ -34,6 +34,8 @@ Install:
 ```PowerShell:
 Install-Module Microsoft.Graph -Scope CurrentUser
 
+Update the TenantID to match your tenant.
+
 Run the script...
 ```
 
