@@ -29,13 +29,13 @@ For each row in a CSV file, the script:
 ### PowerShell Modules
 - `Microsoft.Graph.Authentication`
 - `Microsoft.Graph.Users`
-```text
-your code
-```
+
 Install:
-```powershell
+```PowerShell:
 Install-Module Microsoft.Graph -Scope CurrentUser
-'''
+
+Run the script...
+```
 
 ## Microsoft documentation (Source of Authority)
 
