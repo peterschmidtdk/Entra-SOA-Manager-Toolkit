@@ -45,3 +45,7 @@ This script aligns with Microsoft’s **Source of Authority (SOA)** guidance for
 - Configure User Source of Authority (SOA) (How-to)  
   https://learn.microsoft.com/en-us/entra/identity/hybrid/how-to-user-source-of-authority-configure :contentReference[oaicite:3]{index=3}
 
+### Group SOA (Groups)
+- Convert Group Source of Authority (SOA) to the cloud (Overview)  
+  https://learn.microsoft.com/en-us/entra/identity/hybrid/concept-source-of-authority-overview :contentReference[oaicite:4]{index=4}
+
