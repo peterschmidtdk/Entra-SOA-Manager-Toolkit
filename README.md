@@ -33,6 +33,7 @@ For each row in a CSV file, the script:
 Install:
 ```powershell
 Install-Module Microsoft.Graph -Scope CurrentUser
+'''
 
 ## Microsoft documentation (Source of Authority)
 
