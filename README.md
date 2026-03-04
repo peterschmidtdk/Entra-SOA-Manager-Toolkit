@@ -66,3 +66,14 @@ This script aligns with Microsoft’s **Source of Authority (SOA)** guidance for
 ### Guidance for IT Architects
 - Cloud-first identity management: Guidance for IT architects (SOA)  
   https://learn.microsoft.com/en-us/entra/identity/hybrid/guidance-it-architects-source-of-authority :contentReference[oaicite:5]{index=5}
+
+## ⚠️ Important / Disclaimer
+
+This script is provided **as-is**, without warranty.
+
+- **Always test in a non-production (lab) tenant first**
+- Review and understand the code before running it
+- Start with a small pilot CSV and validate results
+- Do **not** run in production until you are confident in the behavior and impact
+
+You are responsible for any changes made by running this script.
