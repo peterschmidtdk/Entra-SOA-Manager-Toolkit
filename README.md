@@ -13,7 +13,7 @@ This script is designed for tenant-to-tenant migrations and Entra cleanup scenar
 
 ---
 
-## What Set-EntraUserSOA-Bulk.ps1 does
+## What Set-EntraUserSOA-GUI.ps1 does
 
 For each row in a CSV file, the script:
 
