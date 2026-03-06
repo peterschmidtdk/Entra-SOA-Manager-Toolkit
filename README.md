@@ -8,7 +8,7 @@ This script is designed for tenant-to-tenant migrations and Entra cleanup scenar
 
 # Set-EntraGroupSOA-Bulk.ps1
 This script is not fully ready for public yet.
-
+This script is designed for tenant-to-tenant migrations and Entra cleanup scenarios where you need to convert users from on-prem managed to cloud managed selectively using a GUI.
 
 ---
 
