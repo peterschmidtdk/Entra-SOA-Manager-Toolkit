@@ -158,6 +158,7 @@ function Connect-ToGraph {
     Log-Section "Connecting to Microsoft Graph"
     Log-Info "Tenant ID : $TenantId"
     Log-Info "Scopes    : User.Read.All, User-OnPremisesSyncBehavior.ReadWrite.All"
+    Log-Warn "A browser window (or device-code prompt) will open for authentication – complete the sign-in there."
 
     try {
         Import-Module Microsoft.Graph.Authentication -ErrorAction Stop
@@ -178,10 +179,22 @@ function Connect-ToGraph {
         return $true
     }
     catch {
-        Log-Error "Connection failed: $($_.Exception.Message)"
-        Write-LogFile "Connection failed: $($_.Exception.Message)" "ERROR"
+        # Build the most informative error message available
+        $errMsg = $_.Exception.Message
+        if ([string]::IsNullOrWhiteSpace($errMsg)) { $errMsg = $_.ToString() }
+        if ([string]::IsNullOrWhiteSpace($errMsg) -and $_.Exception.InnerException) {
+            $errMsg = $_.Exception.InnerException.Message
+        }
+        if ([string]::IsNullOrWhiteSpace($errMsg)) { $errMsg = "(no error message returned)" }
+
+        $errCategory = $_.CategoryInfo.Category
+        $errFull     = "[$errCategory] $errMsg"
+
+        Log-Error "Connection failed: $errFull"
+        Log-Error "FullError: $($_.ToString())"
+        Write-LogFile "Connection failed: $errFull" "ERROR"
         $Script:IsConnected = $false
-        return $false
+        return $errFull   # return the message so the caller can show a dialog
     }
 }
 
@@ -983,16 +996,31 @@ function New-MainForm {
     # ── Connect ───────────────────────────────────────────────────────────────
     $btnConnect.Add_Click({
         $form.UseWaitCursor = $true
-        Set-StatusText "Connecting to Microsoft Graph..."
-        $ok = Connect-ToGraph -TenantId $txtTenantId.Text.Trim()
-        if ($ok) {
+        $Script:BtnConnect.Enabled = $false
+        Set-StatusText "Connecting to Microsoft Graph – complete the sign-in in the browser/prompt..."
+
+        $result = Connect-ToGraph -TenantId $txtTenantId.Text.Trim()
+
+        if ($result -eq $true) {
             $ctx = Get-MgContext
             Update-ConnectionUI -Connected $true -Account $ctx.Account
             Set-StatusText "Connected. Click 'Load Users' to load the user list."
         }
         else {
             Update-ConnectionUI -Connected $false
-            Set-StatusText "Connection failed – check the log for details."
+            $errDetail = if ($result -is [string]) { $result } else { "Unknown error – see the log panel." }
+            Set-StatusText "Connection failed."
+            [System.Windows.Forms.MessageBox]::Show(
+                "Connection to Microsoft Graph failed.`n`nError:`n$errDetail`n`nCommon causes:`n" +
+                "  • Wrong or inaccessible Tenant ID`n" +
+                "  • Browser sign-in cancelled or timed out`n" +
+                "  • Insufficient permissions in the tenant`n" +
+                "  • Required modules not up to date`n`n" +
+                "Full details are in the log panel.",
+                "Connection Failed",
+                [System.Windows.Forms.MessageBoxButtons]::OK,
+                [System.Windows.Forms.MessageBoxIcon]::Error
+            ) | Out-Null
         }
         $form.UseWaitCursor = $false
     })
