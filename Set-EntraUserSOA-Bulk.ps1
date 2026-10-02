@@ -1,7 +1,16 @@
-<# 
+<#
 .SYNOPSIS
   Updates onPremisesSyncBehavior.isCloudManaged (beta endpoint) based on CSV input: Identity,Mode
   If Mode is missing/empty -> defaults to TRUE.
+
+.PARAMETER TenantId
+  The Entra ID tenant ID (GUID). Required.
+
+.PARAMETER InputCsv
+  Path to the input CSV file. Defaults to .\input-users.csv
+
+.PARAMETER WhatIf
+  When specified, simulates changes without applying them.
 
 .CSV
   Identity,Mode
@@ -12,25 +21,23 @@
   - Identity is treated as UserPrincipalName (UPN)
   - Mode is optional. If blank/missing, defaults to $true.
 #>
+param(
+    [Parameter(Mandatory)][string]$TenantId,
+    [string]$InputCsv = ".\input-users.csv",
+    [switch]$WhatIf
+)
 
 # ----------------------------
 # Version
 # ----------------------------
-$ScriptVersion = "v1.2"
-$Updated       = "2026-03-03"
+$ScriptVersion = "v1.3"
+$Updated       = "2026-03-09"
 
 # ----------------------------
 # Modules
 # ----------------------------
 Import-Module Microsoft.Graph.Users -ErrorAction Stop
 Import-Module Microsoft.Graph.Authentication -ErrorAction Stop
-
-# ----------------------------
-# Settings
-# ----------------------------
-$tenantId  = "" #Add tenantID here
-$inputCsv  = ".\input-users.csv"
-$WhatIf    = $false   # <--- set to $true to simulate (no changes)
 
 # ----------------------------
 # Logging setup
@@ -95,17 +102,17 @@ function Convert-ModeToBool {
 # Start
 # ----------------------------
 Write-HostColor "SOA Conversion Script $ScriptVersion ($Updated)" Cyan
-Write-HostColor "TenantId: $tenantId" Gray
-Write-HostColor "Input CSV: $inputCsv" Gray
+Write-HostColor "TenantId: $TenantId" Gray
+Write-HostColor "Input CSV: $InputCsv" Gray
 Write-HostColor "WhatIf: $WhatIf" Yellow
 Write-Host ""
 
-Write-Log "Starting. Version=$ScriptVersion Updated=$Updated TenantId=$tenantId InputCsv=$inputCsv WhatIf=$WhatIf" "INFO"
+Write-Log "Starting. Version=$ScriptVersion Updated=$Updated TenantId=$TenantId InputCsv=$InputCsv WhatIf=$WhatIf RunAs=$env:USERNAME" "INFO"
 
 # Connect
 try {
     Write-HostColor "Connecting to Microsoft Graph..." Cyan
-    Connect-MgGraph -Scopes "User.Read.All,User-OnPremisesSyncBehavior.ReadWrite.All" -TenantId $tenantId -ErrorAction Stop | Out-Null
+    Connect-MgGraph -Scopes "User.Read.All,User-OnPremisesSyncBehavior.ReadWrite.All" -TenantId $TenantId -ErrorAction Stop | Out-Null
     Write-HostColor "Connected." Green
     Write-Log "Connected to Microsoft Graph." "SUCCESS"
 }
@@ -115,76 +122,59 @@ catch {
     throw
 }
 
-# Validate CSV
-if (-not (Test-Path $inputCsv)) {
-    Write-HostColor "ERROR: Input CSV not found: $inputCsv" Red
-    Write-Log "Input CSV not found: $inputCsv" "ERROR"
-    throw "Missing input CSV: $inputCsv"
-}
-
-$rows = Import-Csv -Path $inputCsv
-if (-not $rows -or $rows.Count -eq 0) {
-    Write-HostColor "ERROR: Input CSV is empty: $inputCsv" Red
-    Write-Log "Input CSV is empty: $inputCsv" "ERROR"
-    throw "Empty input CSV: $inputCsv"
-}
-
-# Results
-$results = New-Object System.Collections.Generic.List[object]
-$total   = $rows.Count
-$idx     = 0
-
-foreach ($row in $rows) {
-    $idx++
-
-    $upnRaw  = $row.Identity
-    $modeRaw = $row.Mode
-
-    $upn = if ($upnRaw) { $upnRaw.Trim() } else { "" }
-    if ([string]::IsNullOrWhiteSpace($upn)) {
-        $msg = "Row ${idx}/${total}: Missing Identity. Skipping."
-        Write-HostColor $msg Yellow
-        Write-Log $msg "WARN"
-
-        $results.Add([pscustomobject]@{
-            Timestamp = (Get-Date).ToString("s")
-            Identity  = ""
-            Mode      = $modeRaw
-            DisplayName = ""
-            ObjectId  = ""
-            PreviousIsCloudManaged = ""
-            TargetIsCloudManaged   = ""
-            NewIsCloudManaged      = ""
-            Action   = "Skipped"
-            Status   = "MissingIdentity"
-            Error    = ""
-        })
-        continue
+try {
+    # Validate CSV
+    if (-not (Test-Path $InputCsv)) {
+        Write-HostColor "ERROR: Input CSV not found: $InputCsv" Red
+        Write-Log "Input CSV not found: $InputCsv" "ERROR"
+        throw "Missing input CSV: $InputCsv"
     }
 
-    # Mode OPTIONAL: if empty/missing -> default TRUE
-    $targetBool = Convert-ModeToBool -Mode $modeRaw
-    if ($null -eq $targetBool) {
-        $targetBool = $true
-        $msg = "Row ${idx}/${total}: Mode missing/blank for ${upn}. Defaulting to TRUE."
-        Write-HostColor $msg Magenta
-        Write-Log $msg "WARN"
+    # @() ensures array for single-row CSVs
+    $rows = @(Import-Csv -Path $InputCsv -ErrorAction Stop)
+    if ($rows.Count -eq 0) {
+        Write-HostColor "ERROR: Input CSV is empty: $InputCsv" Red
+        Write-Log "Input CSV is empty: $InputCsv" "ERROR"
+        throw "Empty input CSV: $InputCsv"
     }
 
-    Write-HostColor "[${idx}/${total}] Processing: $upn  (Target isCloudManaged=$targetBool)" Cyan
-    Write-Log "Row ${idx}/${total}: Processing $upn Target=$targetBool (Mode=$modeRaw)" "INFO"
+    # Results
+    $results = New-Object System.Collections.Generic.List[object]
+    $total   = $rows.Count
+    $idx     = 0
 
-    $displayName  = ""
-    $userObjectId = ""
-    $prevVal      = ""
-    $newVal       = ""
+    foreach ($row in $rows) {
+        $idx++
 
-    try {
-        # Lookup user by UPN
-        $user = Get-MgUser -Filter "userPrincipalName eq '$upn'" -ConsistencyLevel eventual -CountVariable count -ErrorAction Stop
+        $upnRaw  = $row.Identity
+        $modeRaw = $row.Mode
 
-        if ($null -eq $user) {
-            $msg = "User not found: $upn"
+        $upn = if ($upnRaw) { $upnRaw.Trim() } else { "" }
+        if ([string]::IsNullOrWhiteSpace($upn)) {
+            $msg = "Row ${idx}/${total}: Missing Identity. Skipping."
+            Write-HostColor $msg Yellow
+            Write-Log $msg "WARN"
+
+            $results.Add([pscustomobject]@{
+                Timestamp = (Get-Date).ToString("s")
+                Identity  = ""
+                Mode      = $modeRaw
+                DisplayName = ""
+                ObjectId  = ""
+                PreviousIsCloudManaged = ""
+                TargetIsCloudManaged   = ""
+                NewIsCloudManaged      = ""
+                Action   = "Skipped"
+                Status   = "MissingIdentity"
+                Error    = ""
+            })
+            continue
+        }
+
+        # Validate UPN format to prevent OData filter injection.
+        # Rejects values containing quotes, spaces, or missing @domain.tld structure.
+        if ($upn -notmatch "^[^@\s']+@[^@\s']+\.[^@\s']+$") {
+            $msg = "Row ${idx}/${total}: Invalid UPN format '$upn'. Skipping."
             Write-HostColor $msg Yellow
             Write-Log $msg "WARN"
 
@@ -195,109 +185,173 @@ foreach ($row in $rows) {
                 DisplayName = ""
                 ObjectId  = ""
                 PreviousIsCloudManaged = ""
-                TargetIsCloudManaged   = $targetBool
+                TargetIsCloudManaged   = ""
                 NewIsCloudManaged      = ""
                 Action   = "Skipped"
-                Status   = "NotFound"
+                Status   = "InvalidUPN"
                 Error    = ""
             })
             continue
         }
 
-        $displayName  = $user.DisplayName
-        $userObjectId = $user.Id
-
-        # Read current (beta endpoint)
-        $getUrl  = "https://graph.microsoft.com/beta/users/$userObjectId/onPremisesSyncBehavior?`$select=id,isCloudManaged"
-        $current = Invoke-MgGraphRequest -Method Get -Uri $getUrl -ErrorAction Stop
-        $prevVal = $current.isCloudManaged
-
-        $prevIsTrue  = ($prevVal -eq $true -or "$prevVal" -eq "true")
-        $prevIsFalse = ($prevVal -eq $false -or "$prevVal" -eq "false")
-
-        $alreadyTarget =
-            ($targetBool -eq $true  -and $prevIsTrue) -or
-            ($targetBool -eq $false -and $prevIsFalse)
-
-        if ($alreadyTarget) {
-            $msg = "No change (already isCloudManaged=$targetBool): $upn ($displayName)"
-            Write-HostColor $msg Yellow
-            Write-Log $msg "INFO"
-
-            $results.Add([pscustomobject]@{
-                Timestamp = (Get-Date).ToString("s")
-                Identity  = $upn
-                Mode      = $modeRaw
-                DisplayName = $displayName
-                ObjectId  = $userObjectId
-                PreviousIsCloudManaged = $prevVal
-                TargetIsCloudManaged   = $targetBool
-                NewIsCloudManaged      = $prevVal
-                Action   = "NoChange"
-                Status   = "OK"
-                Error    = ""
-            })
-            continue
-        }
-
-        if ($WhatIf) {
-            $msg = "WHATIF: Would set isCloudManaged=$targetBool for $upn ($displayName)"
-            Write-HostColor $msg Magenta
-            Write-Log $msg "INFO"
-
-            $results.Add([pscustomobject]@{
-                Timestamp = (Get-Date).ToString("s")
-                Identity  = $upn
-                Mode      = $modeRaw
-                DisplayName = $displayName
-                ObjectId  = $userObjectId
-                PreviousIsCloudManaged = $prevVal
-                TargetIsCloudManaged   = $targetBool
-                NewIsCloudManaged      = ""
-                Action   = "WhatIf"
-                Status   = "Planned"
-                Error    = ""
-            })
-            continue
-        }
-
-        # PATCH
-        $patchUrl = "https://graph.microsoft.com/beta/users/$userObjectId/onPremisesSyncBehavior"
-        $jsonPayload = @{ isCloudManaged = $targetBool } | ConvertTo-Json
-
-        Invoke-MgGraphRequest -Uri $patchUrl -Method Patch -ContentType "application/json" -Body $jsonPayload -ErrorAction Stop
-
-        # Verify
-        $verify = Invoke-MgGraphRequest -Method Get -Uri $getUrl -ErrorAction Stop
-        $newVal = $verify.isCloudManaged
-
-        $newIsTarget =
-            ($targetBool -eq $true  -and ($newVal -eq $true -or "$newVal" -eq "true")) -or
-            ($targetBool -eq $false -and ($newVal -eq $false -or "$newVal" -eq "false"))
-
-        if ($newIsTarget) {
-            $msg = "Changed: $upn ($displayName) -> isCloudManaged=$targetBool"
-            Write-HostColor $msg Green
-            Write-Log $msg "SUCCESS"
-
-            $results.Add([pscustomobject]@{
-                Timestamp = (Get-Date).ToString("s")
-                Identity  = $upn
-                Mode      = $modeRaw
-                DisplayName = $displayName
-                ObjectId  = $userObjectId
-                PreviousIsCloudManaged = $prevVal
-                TargetIsCloudManaged   = $targetBool
-                NewIsCloudManaged      = $newVal
-                Action   = "Updated"
-                Status   = "OK"
-                Error    = ""
-            })
-        }
-        else {
-            $msg = "Warning: Updated but verification did not match target. $upn ($displayName) newValue='$newVal' target='$targetBool'"
+        # Mode OPTIONAL: if empty/missing -> default TRUE
+        $targetBool = Convert-ModeToBool -Mode $modeRaw
+        if ($null -eq $targetBool) {
+            $targetBool = $true
+            $msg = "Row ${idx}/${total}: Mode missing/blank for ${upn}. Defaulting to TRUE."
             Write-HostColor $msg Magenta
             Write-Log $msg "WARN"
+        }
+
+        Write-HostColor "[${idx}/${total}] Processing: $upn  (Target isCloudManaged=$targetBool)" Cyan
+        Write-Log "Row ${idx}/${total}: Processing $upn Target=$targetBool (Mode=$modeRaw)" "INFO"
+
+        $displayName  = ""
+        $userObjectId = ""
+        $prevVal      = ""
+        $newVal       = ""
+
+        try {
+            # Lookup user by UPN (format validated above)
+            $user = Get-MgUser -Filter "userPrincipalName eq '$upn'" -ConsistencyLevel eventual -CountVariable count -ErrorAction Stop
+
+            if ($null -eq $user) {
+                $msg = "User not found: $upn"
+                Write-HostColor $msg Yellow
+                Write-Log $msg "WARN"
+
+                $results.Add([pscustomobject]@{
+                    Timestamp = (Get-Date).ToString("s")
+                    Identity  = $upn
+                    Mode      = $modeRaw
+                    DisplayName = ""
+                    ObjectId  = ""
+                    PreviousIsCloudManaged = ""
+                    TargetIsCloudManaged   = $targetBool
+                    NewIsCloudManaged      = ""
+                    Action   = "Skipped"
+                    Status   = "NotFound"
+                    Error    = ""
+                })
+                continue
+            }
+
+            $displayName  = $user.DisplayName
+            $userObjectId = $user.Id
+
+            # Read current (beta endpoint)
+            $getUrl  = "https://graph.microsoft.com/beta/users/$userObjectId/onPremisesSyncBehavior?`$select=id,isCloudManaged"
+            $current = Invoke-MgGraphRequest -Method Get -Uri $getUrl -ErrorAction Stop
+            $prevVal = $current.isCloudManaged
+
+            # Normalize API return value (bool or string) to a consistent comparison
+            $prevIsTrue  = ("$prevVal".ToLower() -eq "true")
+            $prevIsFalse = ("$prevVal".ToLower() -eq "false")
+
+            $alreadyTarget =
+                ($targetBool -eq $true  -and $prevIsTrue) -or
+                ($targetBool -eq $false -and $prevIsFalse)
+
+            if ($alreadyTarget) {
+                $msg = "No change (already isCloudManaged=$targetBool): $upn ($displayName)"
+                Write-HostColor $msg Yellow
+                Write-Log $msg "INFO"
+
+                $results.Add([pscustomobject]@{
+                    Timestamp = (Get-Date).ToString("s")
+                    Identity  = $upn
+                    Mode      = $modeRaw
+                    DisplayName = $displayName
+                    ObjectId  = $userObjectId
+                    PreviousIsCloudManaged = $prevVal
+                    TargetIsCloudManaged   = $targetBool
+                    NewIsCloudManaged      = $prevVal
+                    Action   = "NoChange"
+                    Status   = "OK"
+                    Error    = ""
+                })
+                continue
+            }
+
+            if ($WhatIf) {
+                $msg = "WHATIF: Would set isCloudManaged=$targetBool for $upn ($displayName)"
+                Write-HostColor $msg Magenta
+                Write-Log $msg "INFO"
+
+                $results.Add([pscustomobject]@{
+                    Timestamp = (Get-Date).ToString("s")
+                    Identity  = $upn
+                    Mode      = $modeRaw
+                    DisplayName = $displayName
+                    ObjectId  = $userObjectId
+                    PreviousIsCloudManaged = $prevVal
+                    TargetIsCloudManaged   = $targetBool
+                    NewIsCloudManaged      = ""
+                    Action   = "WhatIf"
+                    Status   = "Planned"
+                    Error    = ""
+                })
+                continue
+            }
+
+            # PATCH
+            $patchUrl = "https://graph.microsoft.com/beta/users/$userObjectId/onPremisesSyncBehavior"
+            $jsonPayload = @{ isCloudManaged = $targetBool } | ConvertTo-Json
+
+            Invoke-MgGraphRequest -Uri $patchUrl -Method Patch -ContentType "application/json" -Body $jsonPayload -ErrorAction Stop
+
+            # Verify
+            $verify = Invoke-MgGraphRequest -Method Get -Uri $getUrl -ErrorAction Stop
+            $newVal = $verify.isCloudManaged
+
+            $newIsTarget =
+                ($targetBool -eq $true  -and ("$newVal".ToLower() -eq "true")) -or
+                ($targetBool -eq $false -and ("$newVal".ToLower() -eq "false"))
+
+            if ($newIsTarget) {
+                $msg = "Changed: $upn ($displayName) -> isCloudManaged=$targetBool"
+                Write-HostColor $msg Green
+                Write-Log $msg "SUCCESS"
+
+                $results.Add([pscustomobject]@{
+                    Timestamp = (Get-Date).ToString("s")
+                    Identity  = $upn
+                    Mode      = $modeRaw
+                    DisplayName = $displayName
+                    ObjectId  = $userObjectId
+                    PreviousIsCloudManaged = $prevVal
+                    TargetIsCloudManaged   = $targetBool
+                    NewIsCloudManaged      = $newVal
+                    Action   = "Updated"
+                    Status   = "OK"
+                    Error    = ""
+                })
+            }
+            else {
+                $msg = "Warning: Updated but verification did not match target. $upn ($displayName) newValue='$newVal' target='$targetBool'"
+                Write-HostColor $msg Magenta
+                Write-Log $msg "WARN"
+
+                $results.Add([pscustomobject]@{
+                    Timestamp = (Get-Date).ToString("s")
+                    Identity  = $upn
+                    Mode      = $modeRaw
+                    DisplayName = $displayName
+                    ObjectId  = $userObjectId
+                    PreviousIsCloudManaged = $prevVal
+                    TargetIsCloudManaged   = $targetBool
+                    NewIsCloudManaged      = $newVal
+                    Action   = "Updated"
+                    Status   = "VerifyFailed"
+                    Error    = ""
+                })
+            }
+        }
+        catch {
+            $err = $_.Exception.Message
+            $msg = "ERROR: ${upn} -> $err"
+            Write-HostColor $msg Red
+            Write-Log $msg "ERROR"
 
             $results.Add([pscustomobject]@{
                 Timestamp = (Get-Date).ToString("s")
@@ -308,44 +362,25 @@ foreach ($row in $rows) {
                 PreviousIsCloudManaged = $prevVal
                 TargetIsCloudManaged   = $targetBool
                 NewIsCloudManaged      = $newVal
-                Action   = "Updated"
-                Status   = "VerifyFailed"
-                Error    = ""
+                Action   = "Failed"
+                Status   = "Error"
+                Error    = $err
             })
         }
-    }
-    catch {
-        $err = $_.Exception.Message
-        $msg = "ERROR: ${upn} -> $err"
-        Write-HostColor $msg Red
-        Write-Log $msg "ERROR"
 
-        $results.Add([pscustomobject]@{
-            Timestamp = (Get-Date).ToString("s")
-            Identity  = $upn
-            Mode      = $modeRaw
-            DisplayName = $displayName
-            ObjectId  = $userObjectId
-            PreviousIsCloudManaged = $prevVal
-            TargetIsCloudManaged   = $targetBool
-            NewIsCloudManaged      = $newVal
-            Action   = "Failed"
-            Status   = "Error"
-            Error    = $err
-        })
+        Write-Host ""
     }
 
-    Write-Host ""
+    # Export results (semicolon for DK-friendly Excel)
+    $results | Export-Csv -Path $outCsv -NoTypeInformation -Encoding UTF8 -Delimiter ";"
+
+    Write-HostColor "Done." Cyan
+    Write-HostColor "Log file:   $logFile" Gray
+    Write-HostColor "Result CSV: $outCsv" Gray
+
+    Write-Log "Completed. Results exported to $outCsv" "INFO"
 }
-
-# Export results (semicolon for DK-friendly Excel)
-$results | Export-Csv -Path $outCsv -NoTypeInformation -Encoding UTF8 -Delimiter ";"
-
-Write-HostColor "Done." Cyan
-Write-HostColor "Log file:   $logFile" Gray
-Write-HostColor "Result CSV: $outCsv" Gray
-
-Write-Log "Completed. Results exported to $outCsv" "INFO"
-
-Disconnect-MgGraph | Out-Null
-Write-Log "Disconnected from Microsoft Graph." "INFO"
+finally {
+    Disconnect-MgGraph | Out-Null
+    Write-Log "Disconnected from Microsoft Graph." "INFO"
+}

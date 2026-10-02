@@ -6,7 +6,7 @@ Bulk update Entra ID users’ **Source of Authority (SOA)** by setting **`onPrem
 
 This script is designed for tenant-to-tenant migrations and Entra cleanup scenarios where you need to convert users from **on-prem managed** to **cloud managed** (or explicitly set either state) at scale.
 
-# Set-EntraGroupSOA-GUI.ps1
+# Set-EntraGroupSOA-Bulk.ps1
 This script is not fully ready for public yet.
 
 This script is designed for tenant-to-tenant migrations and Entra cleanup scenarios where you need to convert users from on-prem managed to cloud managed selectively using a GUI.
